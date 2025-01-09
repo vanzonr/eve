@@ -1,0 +1,233 @@
+#!/bin/bash
+
+# eve: Easier python virtual environment management
+
+# shellcheck disable=SC1090
+
+# register virtual environment for use with jupyter
+#
+# 1. Deduces the virtual environment name from the VIRTUAL_ENV 
+#    environment variable.
+#
+# 2. Install ipykernel in the virtual environment, which allows 
+#    it to operate as a kernel.
+#
+# 3. Register the virtual environment as a kernel in 
+#    ~/.local/share/jupyter/kernels/<NAME>/kernel.json
+#
+# 4. Adds environment variables to that kernel.json file to 
+#    reproduce the current environment.
+#
+function eve2jup() {
+    evename="${VIRTUAL_ENV##*/}"
+    if [[ "${evename:-}" ]]; then
+        pip install ipykernel > /dev/null
+        jsonfile="${HOME}/.local/share/jupyter/kernels/${evename,,}/kernel.json"
+        if [[ ! -f "${jsonfile}" ]]; then
+            python -m ipykernel install --name "${evename}" --user
+            if [[ -f "${jsonfile}" ]]; then
+                exportvars=(PATH LD_LIBRARY_PATH LIBRARY_PATH
+                            MANPATH CPATH PKG_CONFIG_PATH
+                            PYTHONPATH EBPYTHONPREFIXES JAVA_HOME
+                            CMAKE_PREFIX_PATH PKG_CONFIG_PATH)
+                jsonfile2=$(mktemp)
+                {
+                    head --lines -2 "${jsonfile}"
+                    echo " },"
+                    echo ' "env": {'
+                    for var in "${exportvars[@]}"; do
+                        echo "  \"${var}\": \"${!var}\", "
+                    done
+                    echo '  "EVE2JUP": "true"'
+                    tail -n 2 "${jsonfile}"
+                } > "${jsonfile2}"
+                cat "${jsonfile2}" > "${jsonfile}"
+                \rm --force "${jsonfile2}"
+            else
+                false
+            fi
+        fi
+    else
+        false
+    fi
+}
+
+function _eveerror() {
+    echo "Error (eve): $*" 1>&2
+    false
+}
+
+# create, list, remove or activate
+function eve() {
+   everoot="${EVEROOT:-${HOME}/.virtualenvs}"
+   if [[ "$1" = help || "$1" = --help || "$1" = -h  || -z "$1" ]]; then
+       cat <<EOF
+eve - easier python virtual environment management
+
+Usage:
+        eve help | --help | -h              # show his help message
+        eve list                            # list available virtual environments
+        eve [activate] ENVNAME              # activate a virtual environment
+        eve create ENVNAME [PACKAGE ...]    # create and activate a virtual environment
+        eve deactivate [ENVNAME]            # deactivate a virtual environment
+        eve describe [ENVNAME]              # describe a virtual environment
+        eve remove [ENVNAME]                # remove a virtual environment
+        eve module save                     # preserve currently loaded modules in environment
+EOF
+       if [[ $# = 0 ]]; then
+           _eveerror "Error (eve): no command given"
+       fi
+   elif [[ "$1" = create ]]; then
+       if [[ "${VIRTUAL_ENV:-}" ]]; then
+           _eveerror "cannot create while another environment is active (${VIRTUAL_ENV##*/})"
+       elif [[ -z "${2:-}" ]]; then
+           _eveerror "no environment name given"
+       else
+           mkdir --parents "${everoot}"
+           virtualenv --system-site-packages "${everoot}/$2"
+           module save "eve_$2"
+           module save "eve_bash_$$" >& /dev/null
+           source "${everoot}/$2"/bin/activate
+           if [[ $# != 2 ]]; then
+               shift 2
+               pip install "$@"
+           fi
+           eve2jup
+       fi
+   elif [[ "$1" = list ]]; then
+       if [[ -d "${everoot}"  ]] ; then
+           \ls -1 "${everoot}"
+       fi
+   elif [[ "$1" = remove ]]; then
+       if [[ -z "$2" ]]; then
+           _eveerror "no environment name given"
+       elif [[ ! -f "${everoot}/$2/bin/activate" ]]; then
+           _eveerror "environment '$2' does not exist"
+       else
+           echo "About to remove directory '${everoot}/$2'"
+           if [[ -d "${HOME}/.local/share/jupyter/kernels/$2" ]]; then
+               echo "About to remove '${HOME}/.local/share/jupyter/kernels/$2'"
+           fi
+           while true; do
+               read -rp 'Proceed (y/N)? ' yesno
+               case "${yesno^^}" in
+	           Y|YES)
+                       break ;;
+	           N|NO|"")
+                       _eveerror "aborting removal" ; return ;;
+                   *)
+                       continue ;;
+               esac
+           done
+           if [[ "${VIRTUAL_ENV:-}" && "${VIRTUAL_ENV}" =~ $2 ]]; then
+               eve deactivate
+           fi
+           \rm --recursive --force "${everoot:?}/$2"
+           if [[ -d "${HOME}/.local/share/jupyter/kernels/$2" ]]; then
+               \rm -rf -d "${HOME}/.local/share/jupyter/kernels/$2"
+           fi
+           if module describe "eve_$2" >& /dev/null; then
+               module disable "eve_$2" 2>/dev/null
+           fi
+       fi
+   elif [[ "$1" = module ]]; then
+       current_name="${VIRTUAL_ENV##*/}"
+       if [[ -z "${2:-}" ]]; then
+           echo "Module tracking by eve is off"
+       elif [[ "${2:-}" = on ]]; then
+           echo "Module tracking unsupported"
+       elif [[ "${2:-}" = off ]]; then
+           echo "Module tracking unsupported"
+       elif [[ "${2:-}" = save ]]; then
+           module save "eve_${current_name}"
+           jsonfile="${HOME}/.local/share/jupyter/kernels/${evename,,}/kernel.json"
+           rm -f "${jsonfile}"
+           eve2jup
+       else
+           shift
+           _eveerror "Unknown option '$*' to 'module' subcommand"
+       fi
+   elif [[ "$1" = deactivate ]]; then
+       if [[ "${2:-}" && "${VIRTUAL_ENV##*/}" != "$2" ]]; then
+           _eveerror "environment '$2' not activate"
+       elif [[ -z "${VIRTUAL_ENV}" ]]; then
+           _eveerror "No environment active"
+       else
+           echo "deactivate ${VIRTUAL_ENV##*/}"
+           deactivate
+           module restore "eve_bash_$$" >& /dev/null
+           module disable "eve_bash_$$" >& /dev/null
+       fi
+   elif [[ "$1" = describe ]]; then
+       if [ -z "${2:-}" ]; then
+           if [ "${VIRTUAL_ENV##*/}" ]; then
+               eve describe "${VIRTUAL_ENV##*/}"
+           else
+               _eveerror "No environment active"
+           fi
+       else
+           if [ -d "${everoot}/$2" ]; then
+               echo
+               echo "## About $2 ##"
+               "${everoot}/$2"/bin/python --version | sed 's+Python +Python version: +'
+               echo -ne "Location:\t"
+               echo "${everoot}/$2"
+               echo -ne "Created:\t"
+               stat --format=%y "${everoot}/$2/bin/python" | cut -d\  -f1
+               echo -ne "Last used:\t"
+               stat --format=%x "${everoot}/$2/bin/python" | cut -d\  -f1
+               echo -ne "Linked to:\t"
+               readlink -f "${everoot}/$2"/bin/python
+               echo -ne "Creator:\t"
+               stat --format=%U "${everoot}/$2/bin/python"
+               if [ -f "${HOME}/.local/share/jupyter/kernels/$2/kernel.json" ]; then
+                   echo -e "Jupyter kernel:\tyes"
+               else
+                   echo -e "Jupyter kernel:\tno"
+               fi
+               echo
+               echo  "## Environment Modules ##" 
+               if [ -f "${HOME}/.lmod.d/eve_$2" ]; then
+                   module --terse describe "eve_$2" 2>&1
+               else
+                   echo "<unknown>"
+               fi
+               echo
+               echo "## Python Packages ##"
+               "${everoot}/$2"/bin/pip list --local --not-required --format=freeze
+               echo
+               echo "## System Python Packages ##"
+               comm -13 <("${everoot}/$2"/bin/pip list --format=freeze --not-required|sort) <("${everoot}/$2"/bin/pip list --format=freeze|sort)
+               echo
+           fi
+       fi
+   elif [[ "$1" = activate ]]; then
+       if [[ ! -f "${everoot}/$2/bin/activate" ]]; then
+           _eveerror "No environment '$2' exists; did you mean 'eve create $*'?"
+       else
+           if [[ "${VIRTUAL_ENV}" ]]; then
+               current_name="${VIRTUAL_ENV##*/}"
+               if [[ "$2" = "${current_name}" ]]; then
+                   echo "Warning (eve): environment '$2' already active" 1>&2
+               else
+                   echo "Warning (eve): deactivate ${current_name}" 1>&2
+                   eve deactivate
+               fi
+           fi
+           module save "eve_bash_$$" >& /dev/null
+           if module describe "eve_$2" >& /dev/null; then
+               module restore "eve_$2" 2>/dev/null
+           fi
+           source  "${everoot}/$2"/bin/activate
+           if [[ ! -d "${HOME}/.local/share/jupyter/kernels/$2" ]]; then
+               eve2jup || mkdir -p "${HOME}/.local/share/jupyter/kernels/$2"
+           fi
+       fi
+   else
+       if [[ -f "${everoot}/$1/bin/activate" ]]; then
+           eve activate "$1"
+       else
+           _eveerror "Unknown option or environment '$1'"
+       fi
+   fi
+}
