@@ -87,12 +87,16 @@ EOF
                if $dracmode; then
                    # filter what is in scipy-stack
                    declare -A pythonmodule
-                   pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"           
+                   declare -A pythonmoduleload
+                   pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"
+                   moduleload["scipy-stack"]="scipy-stack"
+                   pythonmodule["mpi4py"]="^.*(mpi4py).*$"
+                   moduleload["mpi4py"]="gcc openmpi mpi4py"
                    for pkgs in "$@"; do
                        nomodloaded=true
                        for mod in "${!pythonmodule[@]}"; do
                            if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
-                               module load $mod
+                               module load ${moduleload[$mod]}
                                nomodloaded=false
                                break
                            fi
