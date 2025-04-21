@@ -21,32 +21,8 @@
 function eve2jup() {
     evename="${VIRTUAL_ENV##*/}"
     if [[ "${evename:-}" ]]; then
-        pip install ipykernel > /dev/null
-        jsonfile="${HOME}/.local/share/jupyter/kernels/${evename,,}/kernel.json"
-        if [[ ! -f "${jsonfile}" ]]; then
-            python -m ipykernel install --name "${evename}" --user
-            if [[ -f "${jsonfile}" ]]; then
-                exportvars=(PATH LD_LIBRARY_PATH LIBRARY_PATH
-                            MANPATH CPATH PKG_CONFIG_PATH
-                            PYTHONPATH EBPYTHONPREFIXES JAVA_HOME
-                            CMAKE_PREFIX_PATH PKG_CONFIG_PATH)
-                jsonfile2=$(mktemp)
-                {
-                    head --lines -2 "${jsonfile}"
-                    echo " },"
-                    echo ' "env": {'
-                    for var in "${exportvars[@]}"; do
-                        echo "  \"${var}\": \"${!var}\", "
-                    done
-                    echo '  "EVE2JUP": "true"'
-                    tail -n 2 "${jsonfile}"
-                } > "${jsonfile2}"
-                cat "${jsonfile2}" > "${jsonfile}"
-                \rm --force "${jsonfile2}"
-            else
-                false
-            fi
-        fi
+        # defer to a general utility
+        venv2jup
     else
         false
     fi

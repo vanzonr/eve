@@ -1,0 +1,174 @@
+#!/usr/bin/env python
+#
+# venv2jup: exports a virtual environment to be recognized by a jupyter hub.
+#
+# Run from within a virtual environment. Details in the 'help' function.
+#
+# Ramses van Zon, March 2020 - April 2025
+
+import copy, json, shutil, os, sys
+
+EXPORTVARS = [ 'PATH','LD_LIBRARY_PATH','LIBRARY_PATH',
+               'MANPATH','CPATH','PKG_CONFIG_PATH',
+               'PYTHONPATH', 'EBPYTHONPREFIXES',
+               'JAVA_HOME',
+               'CMAKE_PREFIX_PATH', 'PKG_CONFIG_PATH', 'FI_PROVIDER_PATH' ]
+
+condamode = "CONDA_DEFAULT_ENV" in os.environ
+dracmode = os.readlink(sys.executable)[:7] == '/cvmfs/'
+
+def help():
+    print("""
+venv2jup: allows a virtual environment to be used by jupyter hub.
+
+Usage:
+
+  venv2jup [--help|-h]
+
+Run from within a virtual environment. Afterwards, refresh the jupyter
+hub's server page and the virtual environment will be listed under the
+"New" button.  The environment will also have inherited any settings 
+to the following environment variables:
+
+"""
++', '.join(EXPORTVARS)+
+"""
+
+This automates the following steps:
+
+ 1. Deduces the virtual environment name from the VIRTUAL_ENV or CONDA_DEFAULT_ENV
+    environment variable.
+
+ 2. Install ipykernel in the virtual environment, which allows 
+    it to operate as a kernel.
+
+ 3. Register the virtual environment as a kernel in 
+    ~/.local/share/jupyter/kernels/<NAME>/kernel.json
+
+ 4. Adds environment variables to that kernel.json file to 
+    reproduce the current environment.
+
+Ramses van Zon, March 2020 - April 2025
+""") 
+
+
+def add_environment_to_kernel_json(kerneljsonfile, environ):
+    """Inserts environment variables in environ into the virtual
+    environment's kernel.json file for use in jupyter."""
+    with open(kerneljsonfile) as infile:
+        kjin = json.load(infile)
+    kjout = copy.deepcopy(kjin)
+    if not "env" in kjout:
+        kjout["env"] = {}
+    for envvar in environ:
+        if not envvar in kjout["env"]:
+            kjout["env"][envvar] = environ[envvar]
+        else:
+            if not environ[envvar] in kjout["env"][envvar]:
+                kjout["env"][envvar] += os.pathsep + environ[envvar]
+    if kjin != kjout:
+        backupfile = kerneljsonfile + "~"
+        while os.path.isfile(backupfile):
+            backupfile += "~"
+        shutil.copyfile(kerneljsonfile, backupfile)
+        with open(kerneljsonfile,"w") as oufile:
+            json.dump(kjout,oufile, indent=1)
+        return True
+    else:
+        return False
+
+
+def detect_virtualenv():
+    """detect what venv we're in."""
+    if condamode:
+        venvname = os.environ["CONDA_DEFAULT_ENV"].split(os.sep)[-1]+"-conda"
+    elif "VIRTUAL_ENV" in os.environ:
+        venvname = os.environ["VIRTUAL_ENV"].split(os.sep)[-1]
+    else:
+        print("No virtual environment found; did you forget to source its activate script?")
+        sys.exit(3)
+    print("Found virtual environment "+venvname)
+    return venvname
+
+
+def install_ipykernel():
+    """ensure that ipykernel is installed"""
+    command = None
+    if condamode:
+        exitval = os.system("conda list ipykernel --json | grep ipykernel")
+        if exitval == 0:
+            print("Found ipykernel package")
+        else:
+            command = "conda install --override-channels --channel defaults --yes ipykernel"
+    else:
+        try:
+            import ipykernel
+            print("Found ipykernel package")
+        except:
+            if dracmode:
+                print("Loading ipykernel as a module.")
+                sys.path.append(os.environ["LMOD_DIR"]+os.sep+".."+os.sep+"init")
+                from env_modules_python import module
+                module("load","ipykernel") 
+            else:
+                command = "pip install ipykernel"
+    if command:
+        print("Ipykernel package will be installed with '"+command+"'")
+        exitval = os.system(command)
+        if exitval != 0:
+            print("Command failed")
+            sys.exit(exitval)
+
+
+def register_with_jupyter(venvname):
+    """ensure this venv was registered for use with ipython/jupyter"""
+    kerneljson = os.environ["HOME"] +"/.local/share/jupyter/kernels/"+venvname.lower() + "/kernel.json"
+    if not os.path.isfile(kerneljson):
+        print("No kernel registration found, installing now with '"+"python -m ipykernel install --name "+venvname+" --user'")
+        exitval = os.system("python -m ipykernel install --name "+venvname+" --user")
+        if exitval != 0:
+            print("Command failed")
+            sys.exit(exitval)
+    else:
+        print("Found kernel.json for jupyter")
+    if not os.path.isfile(kerneljson):
+        print("Cannot find "+kerneljson+" for jupyter")
+        sys.exit(2)
+    else:
+        return kerneljson
+
+
+def collect_environment(exportvars, base={}):
+    """select environment variables and add them to base"""
+    collected = copy.deepcopy(base)
+    for envvar in exportvars:
+        if envvar in os.environ:
+            if envvar in collected and not collected[envvar] in os.environ[envvar]:
+                collected[envvar] = os.environ[envvar] + os.pathsep + collected[envvar]
+            else:
+                collected[envvar] = os.environ[envvar]
+    return collected
+
+
+def main():
+    venvname = detect_virtualenv()
+    install_ipykernel()
+    kerneljson = register_with_jupyter(venvname)
+    environ = collect_environment(EXPORTVARS)
+    if 'LD_LIBRARY_PATH' in environ:
+        environ['LD_LIBRARY_PATH']+=os.pathsep+'/scinet/niagara/rocky9cc/lib64'
+    else:
+        environ['LD_LIBRARY_PATH']='/scinet/niagara/rocky9cc/lib64'
+    if not 'PYTHONPATH' in environ:
+        environ['PYTHONPATH'] = ''
+    if add_environment_to_kernel_json(kerneljson, environ):
+        print("Environment changes written to "+kerneljson) 
+    else:
+        print("No changes required to "+kerneljson)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 1: # no arguments
+        help()
+    else:
+        main()
