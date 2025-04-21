@@ -63,6 +63,10 @@ EOF
            whichpython=$(readlink -f `which python`)
            if [[ "${whichpython:0:7}" = "/cvmfs/" ]]; then
                dracmode=true;
+               if ! module is-loaded python; then
+                   echo "Please load a Python module before running 'eve create'" 1>&2
+                   return 2
+               fi
            else
                dracmode=false;
            fi
