@@ -59,14 +59,43 @@ EOF
        elif [[ -z "${2:-}" ]]; then
            _eveerror "no environment name given"
        else
+           ## detect drac
+           whichpython=$(readlink -f `which python`)
+           if [[ "${whichpython:0:7}" = "/cvmfs/" ]]; then
+               dracmode=true;
+           else
+               dracmode=false;
+           fi
            mkdir --parents "${everoot}"
-           virtualenv --system-site-packages "${everoot}/$2"
+           if $dracmode; then
+               virtualenv --no-download "${everoot}/$2"
+           else
+               virtualenv --system-site-packages "${everoot}/$2" 
+           fi
            module save "eve_$2"
            module save "eve_bash_$$" >& /dev/null
            source "${everoot}/$2"/bin/activate
+           if $dracmode; then
+               pip install --no-index --upgrade pip
+           fi
            if [[ $# != 2 ]]; then
                shift 2
-               pip install "$@"
+               if $dracmode; then
+                   # filter what is in scipy-stack
+                   scipystackmodule="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"           
+                   for pkgs in "$@"; do
+                       if [[ $pkgs =~ $scipystackmodule ]]; then
+                           module load scipy-stack
+                       else
+                           pip install "$pkgs" --no-index
+                       fi
+                   done
+               else
+                   pip install "$@"
+               fi
+           fi
+           if $dracmode; then
+               module save "eve_${VIRTUAL_ENV##*/}"
            fi
            eve2jup
        fi

@@ -1,10 +1,10 @@
-# Better virtual environment management
+# eve - Easier virtual environment management
 
 ## Installation
 
-  - Copy `modeve` and `venv2jup` to a place in the PATH.
+  - Copy `initeve` and `venv2jup` to a place in the PATH.
   - Make sure `venv2jup` is executable.
-  - In initialization scipts (e.g. .bashrc), add `source modeve`
+  - In initialization scipts (e.g. .bashrc), add `source initeve`
 
 The latter defines a `eve` function. 
 
