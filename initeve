@@ -86,11 +86,18 @@ EOF
                shift 2
                if $dracmode; then
                    # filter what is in scipy-stack
-                   scipystackmodule="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"           
+                   declare -A pythonmodule
+                   pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"           
                    for pkgs in "$@"; do
-                       if [[ $pkgs =~ $scipystackmodule ]]; then
-                           module load scipy-stack
-                       else
+                       nomodloaded=true
+                       for mod in "${!pythonmodule[@]}"; do
+                           if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
+                               module load $mod
+                               nomodloaded=false
+                               break
+                           fi
+                       done
+                       if $nomodloaded; then
                            pip install "$pkgs" --no-index
                        fi
                    done
