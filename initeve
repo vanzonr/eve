@@ -22,6 +22,7 @@ function eve2jup() {
     evename="${VIRTUAL_ENV##*/}"
     if [[ "${evename:-}" ]]; then
         # defer to a general utility
+        echo "COMMAND: venv2jup"
         venv2jup
     else
         false
@@ -32,6 +33,12 @@ function _eveerror() {
     echo "Error (eve): $*" 1>&2
     false
 }
+
+everoot="${EVEROOT:-${HOME}/.virtualenvs}"
+mkdir -p "${everoot}/log"
+evelogfile=${everoot}/log/$$-$RANDOM.log
+\rm -f "$evelogfile"
+touch "$evelogfile"
 
 # create, list, remove or activate
 function eve() {
@@ -70,16 +77,22 @@ EOF
            else
                dracmode=false;
            fi
-           mkdir --parents "${everoot}"
+           echo "INFO: Python from CVMFS stack: $dracmode"
+           mkdir --parents "${everoot}" 
            if $dracmode; then
+               echo "COMMAND: virtualenv --no-download \"${everoot}/$2\""
                virtualenv --no-download "${everoot}/$2"
            else
+               echo "COMMAND: virtualenv --system-site-packages \"${everoot}/$2\""
                virtualenv --system-site-packages "${everoot}/$2" 
            fi
+           echo "COMMAND: module save \"eve_$2\""
            module save "eve_$2"
            module save "eve_bash_$$" >& /dev/null
+           echo "COMMAND: \"${everoot}/$2\"/bin/activate"
            source "${everoot}/$2"/bin/activate
            if $dracmode; then
+               echo "COMMAND: pip install --no-index --upgrade pip"
                pip install --no-index --upgrade pip
            fi
            if [[ $# != 2 ]]; then
@@ -92,28 +105,36 @@ EOF
                    moduleload["scipy-stack"]="scipy-stack"
                    pythonmodule["mpi4py"]="^.*(mpi4py).*$"
                    moduleload["mpi4py"]="gcc openmpi mpi4py"
+                   pythonmodule["pyarrow"]="^.*(pyarrow).*$"
+                   moduleload["pyarrow"]="gcc arrow"
                    for pkgs in "$@"; do
                        nomodloaded=true
                        for mod in "${!pythonmodule[@]}"; do
                            if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
+                               echo "COMMAND: module load ${moduleload[$mod]}"
                                module load ${moduleload[$mod]}
                                nomodloaded=false
                                break
                            fi
                        done
                        if $nomodloaded; then
+                           echo "COMMAND: pip install \"$pkgs\" --no-index"
                            pip install "$pkgs" --no-index
                        fi
                    done
                else
+                   echo "COMMAND: pip install \"$@\""
                    pip install "$@"
                fi
            fi
            if $dracmode; then
+               echo "COMMAND: module save \"eve_${VIRTUAL_ENV##*/}\""
                module save "eve_${VIRTUAL_ENV##*/}"
            fi
+           echo "SAVED MODULES: $(module -t list 1>&2)"
            eve2jup
-       fi
+       fi | tee $evelogfile
+       echo "Log written to $evelogfile"
    elif [[ "$1" = list ]]; then
        if [[ -d "${everoot}"  ]] ; then
            \ls -1 "${everoot}"
