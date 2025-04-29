@@ -36,14 +36,14 @@ function _eveerror() {
 
 everoot="${EVEROOT:-${HOME}/.virtualenvs}"
 mkdir -p "${everoot}/log"
-evelogfile=${everoot}/log/$$-$RANDOM.log
-\rm -f "$evelogfile"
-touch "$evelogfile"
+evelogfile="${everoot}/log/$$-$RANDOM.log"
+\rm -f "${evelogfile}"
+touch "${evelogfile}"
 
 # create, list, remove or activate
 function eve() {
    everoot="${EVEROOT:-${HOME}/.virtualenvs}"
-   if [[ "$1" = help || "$1" = --help || "$1" = -h  || -z "$1" ]]; then
+   if [[ "$1" = "help" || "$1" = "--help" || "$1" = "-h"  || -z "$1" ]]; then
        cat <<EOF
 eve - easier python virtual environment management
 
@@ -57,29 +57,29 @@ Usage:
         eve remove [ENVNAME]                # remove a virtual environment
         eve module save                     # preserve currently loaded modules in environment
 EOF
-       if [[ $# = 0 ]]; then
+       if [[ "$#" = "0" ]]; then
            _eveerror "Error (eve): no command given"
        fi
-   elif [[ "$1" = create ]]; then
+   elif [[ "$1" = "create" ]]; then
        if [[ "${VIRTUAL_ENV:-}" ]]; then
            _eveerror "cannot create while another environment is active (${VIRTUAL_ENV##*/})"
        elif [[ -z "${2:-}" ]]; then
            _eveerror "no environment name given"
        else
-           ## detect drac
-           whichpython=$(readlink -f `which python`)
+           ## detect cvmfs
+           whichpython="$(readlink -f "$(which python)")"
            if [[ "${whichpython:0:7}" = "/cvmfs/" ]]; then
-               dracmode=true;
-               if ! module is-loaded python; then
+               cvmfsmode="true";
+               if ! module is-loaded "python"; then
                    echo "Please load a Python module before running 'eve create'" 1>&2
                    return 2
                fi
            else
-               dracmode=false;
+               cvmfsmode="false";
            fi
-           echo "INFO: Python from CVMFS stack: $dracmode"
+           echo "INFO: Python from CVMFS stack: ${cvmfsmode}"
            mkdir --parents "${everoot}" 
-           if $dracmode; then
+           if "${cvmfsmode}"; then
                echo "COMMAND: virtualenv --no-download \"${everoot}/$2\""
                virtualenv --no-download "${everoot}/$2"
            else
@@ -89,16 +89,16 @@ EOF
            echo "COMMAND: module save \"eve_$2\""
            module save "eve_$2"
            module save "eve_bash_$$" >& /dev/null
-           echo "COMMAND: \"${everoot}/$2\"/bin/activate"
-           source "${everoot}/$2"/bin/activate
-           if $dracmode; then
-               echo "COMMAND: pip install --no-index --upgrade pip"
-               pip install --no-index --upgrade pip
+           echo "COMMAND: \"${everoot}/$2/bin/activate\""
+           source "${everoot}/$2/bin/activate"
+           if "${cvmfsmode}"; then
+               echo "COMMAND: pip install --no-index --upgrade \"pip\""
+               pip install --no-index --upgrade "pip"
            fi
-           if [[ $# != 2 ]]; then
+           if [[ "$#" != "2" ]]; then
                shift 2
-               if $dracmode; then
-                   # filter what is in scipy-stack
+               if "${cvmfsmode}"; then
+                   # filter package provided by the scipy-stack, mpi4py and arrow modules
                    declare -A pythonmodule
                    declare -A pythonmoduleload
                    pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"
@@ -109,39 +109,39 @@ EOF
                    pythonmoduleload["pyarrow"]="gcc arrow"
                    for pkgs in "$@"; do
                        echo "INFO: Installing \"$pkgs\""
-                       nomodloaded=true
+                       nomodloaded="true"
                        for mod in "${!pythonmodule[@]}"; do
                            if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
                                echo "COMMAND: module load ${pythonmoduleload[$mod]}"
-                               module load ${pythonmoduleload[$mod]}
-                               nomodloaded=false
+                               module load "${pythonmoduleload[$mod]}"
+                               nomodloaded="false"
                                break
                            fi
                        done
-                       if $nomodloaded; then
+                       if "$nomodloaded"; then
                            echo "COMMAND: pip install \"$pkgs\" --no-index"
                            pip install "$pkgs" --no-index
                        fi
                    done
                else
-                   echo "COMMAND: pip install \"$@\""
+                   echo "COMMAND: pip install \"$*\""
                    pip install "$@"
                fi
            fi
-           if $dracmode; then
+           if "${cvmfsmode}"; then
                echo "COMMAND: module save \"eve_${VIRTUAL_ENV##*/}\""
                module save "eve_${VIRTUAL_ENV##*/}"
            fi
            echo "SAVED MODULES: $(module -t list 1>&2)"
            eve2jup
-       fi  | tee $evelogfile
+       fi  | tee "${evelogfile}"
        eve activate "$2"
-       echo "Log written to $evelogfile"
-   elif [[ "$1" = list ]]; then
-       if [[ -d "${everoot}"  ]] ; then
+       echo "Log written to ${evelogfile}"
+   elif [[ "$1" = "list" ]]; then
+       if [[ -d "${everoot}" ]]; then
            \ls -1 "${everoot}"
        fi
-   elif [[ "$1" = remove ]]; then
+   elif [[ "$1" = "remove" ]]; then
        if [[ -z "$2" ]]; then
            _eveerror "no environment name given"
        elif [[ ! -f "${everoot}/$2/bin/activate" ]]; then
@@ -173,15 +173,15 @@ EOF
                module disable "eve_$2" 2>/dev/null
            fi
        fi
-   elif [[ "$1" = module ]]; then
+   elif [[ "$1" = "module" ]]; then
        current_name="${VIRTUAL_ENV##*/}"
        if [[ -z "${2:-}" ]]; then
            echo "Module tracking by eve is off"
-       elif [[ "${2:-}" = on ]]; then
+       elif [[ "${2:-}" = "on" ]]; then
            echo "Module tracking unsupported"
-       elif [[ "${2:-}" = off ]]; then
+       elif [[ "${2:-}" = "off" ]]; then
            echo "Module tracking unsupported"
-       elif [[ "${2:-}" = save ]]; then
+       elif [[ "${2:-}" = "save" ]]; then
            module save "eve_${current_name}"
            jsonfile="${HOME}/.local/share/jupyter/kernels/${evename,,}/kernel.json"
            rm -f "${jsonfile}"
@@ -190,7 +190,7 @@ EOF
            shift
            _eveerror "Unknown option '$*' to 'module' subcommand"
        fi
-   elif [[ "$1" = deactivate ]]; then
+   elif [[ "$1" = "deactivate" ]]; then
        if [[ "${2:-}" && "${VIRTUAL_ENV##*/}" != "$2" ]]; then
            _eveerror "environment '$2' not activate"
        elif [[ -z "${VIRTUAL_ENV}" ]]; then
@@ -201,15 +201,15 @@ EOF
            module restore "eve_bash_$$" >& /dev/null
            module disable "eve_bash_$$" >& /dev/null
        fi
-   elif [[ "$1" = describe ]]; then
-       if [ -z "${2:-}" ]; then
-           if [ "${VIRTUAL_ENV##*/}" ]; then
+   elif [[ "$1" = "describe" ]]; then
+       if [[ -z "${2:-}" ]]; then
+           if [[ "${VIRTUAL_ENV##*/}" ]]; then
                eve describe "${VIRTUAL_ENV##*/}"
            else
                _eveerror "No environment active"
            fi
        else
-           if [ -d "${everoot}/$2" ]; then
+           if [[ -d "${everoot}/$2" ]]; then
                echo
                echo "## About $2 ##"
                "${everoot}/$2"/bin/python --version | sed 's+Python +Python version: +'
@@ -220,17 +220,17 @@ EOF
                echo -ne "Last used:\t"
                stat --format=%x "${everoot}/$2/bin/python" | cut -d\  -f1
                echo -ne "Linked to:\t"
-               readlink -f "${everoot}/$2"/bin/python
+               readlink -f "${everoot}/$2/bin/python"
                echo -ne "Creator:\t"
                stat --format=%U "${everoot}/$2/bin/python"
-               if [ -f "${HOME}/.local/share/jupyter/kernels/$2/kernel.json" ]; then
+               if [[ -f "${HOME}/.local/share/jupyter/kernels/$2/kernel.json" ]]; then
                    echo -e "Jupyter kernel:\tyes"
                else
                    echo -e "Jupyter kernel:\tno"
                fi
                echo
                echo  "## Environment Modules ##" 
-               if [ -f "${HOME}/.lmod.d/eve_$2" ]; then
+               if [[ -f "${HOME}/.lmod.d/eve_$2" ]]; then
                    module --terse describe "eve_$2" 2>&1
                else
                    echo "<unknown>"
@@ -244,7 +244,7 @@ EOF
                echo
            fi
        fi
-   elif [[ "$1" = activate ]]; then
+   elif [[ "$1" = "activate" ]]; then
        if [[ ! -f "${everoot}/$2/bin/activate" ]]; then
            _eveerror "No environment '$2' exists; did you mean 'eve create $*'?"
        else
