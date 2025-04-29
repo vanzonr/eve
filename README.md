@@ -1,14 +1,78 @@
 # eve - Easier virtual environment management
 
+## Rationale
+
+On many multi-user compute clusters, Python software is provided
+through a combination of environment modules and python packages to be
+installed in user's virtual environments.
+
+The `eve` package provides a command for the bash shell that makes it
+easier to create, manage and delete such combinations of virtual
+environments and modules collections.  In addition, it helps make
+these environments available in Jupyter Notebook and Jupyter Lab
+environments.
+
 ## Installation
 
-  - Copy `initeve` and `venv2jup` to a place in the PATH.
+  - Copy the files `initeve` and `venv2jup` to a place in the PATH.
   - Make sure `venv2jup` is executable.
-  - In initialization scipts (e.g. .bashrc), add `source initeve`
+  - In an initialization scripts, e.g. `.bashrc`, add the line "`source initeve`".
 
-The latter defines a `eve` function. 
+The latter command defines the `eve` function. 
 
-## Usage:
+## Typical usage
+
+### Create an environment
+```
+module load python scipy-stack # load the modules you need
+eve create myenv scalene       # create a virtual environment with those modules, and install the python package 'scalene'
+```
+The environment is automatically activated.
+
+To deactivate the environment:
+```
+eve deactivate
+```
+
+To (re)activate the environment:
+```
+eve myenv
+```
+(The longer version `eve activate myenv` works as well). Activating an environment with `eve` also loads the modules.
+
+### Add Python Packages
+
+When the environment is active, simply use pip, e.g.
+```
+pip install line_profiler
+```
+
+### Add Environment Modules
+
+After an environment is created and is active, you can still load modules still, but you have to let `eve` know that they should become part of the environment with `eve module save`, e.g.
+```
+module load StdEnv mpi4py
+eve module save
+```
+
+### Manage Virtual Environments
+
+To see all virtual environments managed by eve, type
+```
+eve list
+```
+
+To remove a virtual environment  use
+```
+eve remove myenv
+```
+
+To know what is installed in one of the environments, use
+```
+eve describe myenv
+```
+
+## Command Overview
 
  `eve help|--help|-h`                  # show his help message
 

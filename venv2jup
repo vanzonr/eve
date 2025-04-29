@@ -9,10 +9,15 @@
 import copy, json, shutil, os, sys
 
 EXPORTVARS = [ 'PATH','LD_LIBRARY_PATH','LIBRARY_PATH',
-               'MANPATH','CPATH','PKG_CONFIG_PATH',
-               'PYTHONPATH', 'EBPYTHONPREFIXES',
-               'JAVA_HOME',
-               'CMAKE_PREFIX_PATH', 'PKG_CONFIG_PATH', 'FI_PROVIDER_PATH' ]
+               'MANPATH','CPATH','PKG_CONFIG_PATH', 'PYTHONPATH',
+               'EBPYTHONPREFIXES', 'JAVA_HOME', 'CMAKE_PREFIX_PATH',
+               'PKG_CONFIG_PATH', 'FI_PROVIDER_PATH',
+               'FLEXIBLAS_LIBRARY_PATH', 'LOADEDMODULES', 'LS_COLORS',
+               'MODULEPATH', 'RSNT_SLURM_MPI_TYPE', 'SLURM_MPI_TYPE',
+               'SQUEUE_SORT', 'XDG_DATA_DIRS', '__LMOD_REF_COUNT_MODULEPATH' ]
+
+for start in ['EBDEVEL', 'EBROOT', 'EBVERSION', 'LMOD_FAMILY_', 'OMPI_MCA_', '_ModuleTable']:
+    EXPORTVARS.extend([k for k in os.environ if k.startswith(start)])
 
 condamode = "CONDA_DEFAULT_ENV" in os.environ
 dracmode = os.readlink(sys.executable)[:7] == '/cvmfs/'
