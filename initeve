@@ -34,11 +34,7 @@ function _eveerror() {
     false
 }
 
-everoot="${EVEROOT:-${HOME}/.virtualenvs}"
-mkdir -p "${everoot}/log"
-evelogfile="${everoot}/log/$$-$RANDOM.log"
-\rm -f "${evelogfile}"
-touch "${evelogfile}"
+#everoot="${EVEROOT:-${HOME}/.virtualenvs}"
 
 # create, list, remove or activate
 function eve() {
@@ -61,6 +57,10 @@ EOF
            _eveerror "Error (eve): no command given"
        fi
    elif [[ "$1" = "create" ]]; then
+       mkdir -p "${everoot}/log"
+       evelogfile="${everoot}/log/$$-$RANDOM.log"
+       \rm -f "${evelogfile}"
+       touch "${evelogfile}"
        if [[ "${VIRTUAL_ENV:-}" ]]; then
            _eveerror "cannot create while another environment is active (${VIRTUAL_ENV##*/})"
        elif [[ -z "${2:-}" ]]; then
@@ -237,10 +237,10 @@ EOF
                fi
                echo
                echo "## Python Packages ##"
-               "${everoot}/$2"/bin/pip list --local --not-required --format=freeze
+               "${everoot}/$2"/bin/pip list --local --not-required --format=freeze 2>/dev/null
                echo
                echo "## System Python Packages ##"
-               comm -13 <("${everoot}/$2"/bin/pip list --format=freeze --not-required|sort) <("${everoot}/$2"/bin/pip list --format=freeze|sort)
+               comm -13 <("${everoot}/$2"/bin/pip list --format=freeze --not-required|sort) <("${everoot}/$2"/bin/pip list --format=freeze 2> /dev/null | sort)
                echo
            fi
        fi
