@@ -54,98 +54,102 @@ Usage:
         eve module save                     # preserve currently loaded modules in environment
 EOF
        if [[ "$#" = "0" ]]; then
-           _eveerror "Error (eve): no command given"
+           _eveerror "No command given"
        fi
    elif [[ "$1" = "create" ]]; then
-       mkdir -p "${everoot}/log"
-       evelogfile="${everoot}/log/$$-$RANDOM.log"
-       \rm -f "${evelogfile}"
-       touch "${evelogfile}"
-       if [[ "${VIRTUAL_ENV:-}" ]]; then
-           _eveerror "cannot create while another environment is active (${VIRTUAL_ENV##*/})"
-       elif [[ -z "${2:-}" ]]; then
-           _eveerror "no environment name given"
+       if [[ $(eve list) =~ "$2" ]]; then
+           _eveerror "Environment '$2' already exists"
        else
-           ## detect cvmfs
-           whichpython="$(readlink -f "$(which python)")"
-           if [[ "${whichpython:0:7}" = "/cvmfs/" ]]; then
-               cvmfsmode="true";
-               if ! module is-loaded "python"; then
-                   echo "Please load a Python module before running 'eve create'" 1>&2
-                   return 2
+           mkdir -p "${everoot}/log"
+           evelogfile="${everoot}/log/$$-$RANDOM.log"
+           \rm -f "${evelogfile}"
+           touch "${evelogfile}"
+           if [[ "${VIRTUAL_ENV:-}" ]]; then
+               _eveerror "Cannot create while another environment is active (${VIRTUAL_ENV##*/})"
+           elif [[ -z "${2:-}" ]]; then
+               _eveerror "No environment name given"
+           else
+               ## detect cvmfs
+               whichpython="$(readlink -f "$(which python)")"
+               if [[ "${whichpython:0:7}" = "/cvmfs/" ]]; then
+                   cvmfsmode="true";
+                   if ! module is-loaded "python"; then
+                       echo "Please load a Python module before running 'eve create'" 1>&2
+                       return 2
+                   fi
+               else
+                   cvmfsmode="false";
                fi
-           else
-               cvmfsmode="false";
-           fi
-           echo "INFO: Python from CVMFS stack: ${cvmfsmode}"
-           mkdir --parents "${everoot}" 
-           if "${cvmfsmode}"; then
-               echo "COMMAND: virtualenv --no-download \"${everoot}/$2\""
-               virtualenv --no-download "${everoot}/$2"
-           else
-               echo "COMMAND: virtualenv --system-site-packages \"${everoot}/$2\""
-               virtualenv --system-site-packages "${everoot}/$2" 
-           fi
-           echo "COMMAND: module save \"eve_$2\""
-           module save "eve_$2"
-           module save "eve_bash_$$" >& /dev/null
-           echo "COMMAND: \"${everoot}/$2/bin/activate\""
-           source "${everoot}/$2/bin/activate"
-           if "${cvmfsmode}"; then
-               echo "COMMAND: pip install --no-index --upgrade \"pip\""
-               pip install --no-index --upgrade "pip"
-           fi
-           if [[ "$#" != "2" ]]; then
-               shift 2
+               echo "INFO: Python from CVMFS stack: ${cvmfsmode}"
+               mkdir --parents "${everoot}" 
                if "${cvmfsmode}"; then
-                   # filter package provided by the scipy-stack, mpi4py and arrow modules
-                   declare -A pythonmodule
-                   declare -A pythonmoduleload
-                   pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"
-                   pythonmoduleload["scipy-stack"]="scipy-stack"
-                   pythonmodule["mpi4py"]="^.*(mpi4py).*$"
-                   pythonmoduleload["mpi4py"]="gcc openmpi mpi4py"
-                   pythonmodule["pyarrow"]="^.*(pyarrow).*$"
-                   pythonmoduleload["pyarrow"]="gcc arrow"
-                   for pkgs in "$@"; do
-                       echo "INFO: Installing \"$pkgs\""
-                       nomodloaded="true"
-                       for mod in "${!pythonmodule[@]}"; do
-                           if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
-                               echo "COMMAND: module load ${pythonmoduleload[$mod]}"
-                               module load "${pythonmoduleload[$mod]}"
-                               nomodloaded="false"
-                               break
+                   echo "COMMAND: virtualenv --no-download \"${everoot}/$2\""
+                   virtualenv --no-download "${everoot}/$2"
+               else
+                   echo "COMMAND: virtualenv --system-site-packages \"${everoot}/$2\""
+                   virtualenv --system-site-packages "${everoot}/$2" 
+               fi
+               echo "COMMAND: module save \"eve_$2\""
+               module save "eve_$2"
+               module save "eve_bash_$$" >& /dev/null
+               echo "COMMAND: \"${everoot}/$2/bin/activate\""
+               source "${everoot}/$2/bin/activate"
+               if "${cvmfsmode}"; then
+                   echo "COMMAND: pip install --no-index --upgrade \"pip\""
+                   pip install --no-index --upgrade "pip"
+               fi
+               if [[ "$#" != "2" ]]; then
+                   shift 2
+                   if "${cvmfsmode}"; then
+                       # filter package provided by the scipy-stack, mpi4py and arrow modules
+                       declare -A pythonmodule
+                       declare -A pythonmoduleload
+                       pythonmodule["scipy-stack"]="^.*(contourpy|cycler|fonttools|kiwisolver|matplotlib|mpmath|numpy|packaging|pandas|pillow|pyparsing|python_dateutil|pytz|scipy|six|sympy|tzdat).*$"
+                       pythonmoduleload["scipy-stack"]="scipy-stack"
+                       pythonmodule["mpi4py"]="^.*(mpi4py).*$"
+                       pythonmoduleload["mpi4py"]="gcc openmpi mpi4py"
+                       pythonmodule["pyarrow"]="^.*(pyarrow).*$"
+                       pythonmoduleload["pyarrow"]="gcc arrow"
+                       for pkgs in "$@"; do
+                           echo "INFO: Installing \"$pkgs\""
+                           nomodloaded="true"
+                           for mod in "${!pythonmodule[@]}"; do
+                               if [[ $pkgs =~ ${pythonmodule[$mod]} ]]; then
+                                   echo "COMMAND: module load ${pythonmoduleload[$mod]}"
+                                   module load "${pythonmoduleload[$mod]}"
+                                   nomodloaded="false"
+                                   break
+                               fi
+                           done
+                           if "$nomodloaded"; then
+                               echo "COMMAND: pip install \"$pkgs\" --no-index"
+                               pip install "$pkgs" --no-index
                            fi
                        done
-                       if "$nomodloaded"; then
-                           echo "COMMAND: pip install \"$pkgs\" --no-index"
-                           pip install "$pkgs" --no-index
-                       fi
-                   done
-               else
-                   echo "COMMAND: pip install \"$*\""
-                   pip install "$@"
+                   else
+                       echo "COMMAND: pip install \"$*\""
+                       pip install "$@"
+                   fi
                fi
-           fi
-           if "${cvmfsmode}"; then
-               echo "COMMAND: module save \"eve_${VIRTUAL_ENV##*/}\""
-               module save "eve_${VIRTUAL_ENV##*/}"
-           fi
-           echo "SAVED MODULES: $(module -t list 1>&2)"
-           eve2jup
-       fi  | tee "${evelogfile}"
-       eve activate "$2"
-       echo "Log written to ${evelogfile}"
+               if "${cvmfsmode}"; then
+                   echo "COMMAND: module save \"eve_${VIRTUAL_ENV##*/}\""
+                   module save "eve_${VIRTUAL_ENV##*/}"
+              fi
+              echo "SAVED MODULES: $(module -t list 1>&2)"
+             eve2jup
+         fi  | tee "${evelogfile}"
+        eve activate "$2"
+        echo "Log written to ${evelogfile}"
+        fi
    elif [[ "$1" = "list" ]]; then
        if [[ -d "${everoot}" ]]; then
-           \ls -1 "${everoot}"
+           find "${everoot}" -mindepth 3 -maxdepth 3 -type f -name "activate" | awk -F/  '{print $(NF-2)}'
        fi
    elif [[ "$1" = "remove" ]]; then
        if [[ -z "$2" ]]; then
-           _eveerror "no environment name given"
+           _eveerror "No environment name given"
        elif [[ ! -f "${everoot}/$2/bin/activate" ]]; then
-           _eveerror "environment '$2' does not exist"
+           _eveerror "Environment '$2' does not exist"
        else
            echo "About to remove directory '${everoot}/$2'"
            if [[ -d "${HOME}/.local/share/jupyter/kernels/$2" ]]; then
@@ -157,7 +161,7 @@ EOF
 	           Y|YES)
                        break ;;
 	           N|NO|"")
-                       _eveerror "aborting removal" ; return ;;
+                       _eveerror "Aborting removal" ; return ;;
                    *)
                        continue ;;
                esac
