@@ -85,9 +85,12 @@ EOF
                if "${cvmfsmode}"; then
                    echo "COMMAND: virtualenv --no-download \"${everoot}/$2\""
                    virtualenv --no-download "${everoot}/$2"
-               else
+               elif which virtualenv >&/dev/null ; then 
                    echo "COMMAND: virtualenv --system-site-packages \"${everoot}/$2\""
-                   virtualenv --system-site-packages "${everoot}/$2" 
+                   virtualenv --system-site-packages "${everoot}/$2"
+               else
+                   echo "COMMAND: python3 -m venv \"${everoot}/$2\""
+                   python3 -m venv "${everoot}/$2"
                fi
                echo "COMMAND: module save \"eve_$2\""
                module save "eve_$2"
@@ -135,7 +138,7 @@ EOF
                    echo "COMMAND: module save \"eve_${VIRTUAL_ENV##*/}\""
                    module save "eve_${VIRTUAL_ENV##*/}"
               fi
-              echo "SAVED MODULES: $(module -t list 1>&2)"
+              echo "SAVED MODULES: $(module -t list 2>&1)" 1>&2
              eve2jup
          fi  | tee "${evelogfile}"
         eve activate "$2"
