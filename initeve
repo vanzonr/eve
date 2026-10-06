@@ -34,6 +34,27 @@ function _eveerror() {
     false
 }
 
+# module restore needs some help if CCEnv of *Env mechanism is present
+function _evemodulerestore() {
+    collection="$1"
+    collectionfile="${HOME}/.lmod.d/${collection}"
+    if ! [ -f "${collectionfile}" ]; then
+        echo "File ${collectionfile} not found" 1>&2
+        return 1
+    else
+        if grep -q CCEnv "${collectionfile}" 2>/dev/null; then
+            module load CCEnv
+        else
+            envmod=$(grep 'fullName = ".*Env' "${collectionfile}" 2>/dev/null)
+            if [ $? = 0 ]; then
+                envmodname=$(echo ${a} | cut -d\" -f 2)
+                module load "${envmodname}"
+            fi
+        fi
+    fi
+    module restore "${collection}" 2>/dev/null
+}
+
 #everoot="${EVEROOT:-${HOME}/.virtualenvs}"
 
 # create, list, remove or activate
@@ -205,7 +226,7 @@ EOF
        else
            echo "deactivate ${VIRTUAL_ENV##*/}"
            deactivate
-           module restore "eve_bash_$$" >& /dev/null
+           _evemodulerestore "eve_bash_$$" >& /dev/null
            module disable "eve_bash_$$" >& /dev/null
        fi
    elif [[ "$1" = "describe" ]]; then
@@ -266,7 +287,7 @@ EOF
            fi
            module save "eve_bash_$$" >& /dev/null
            if module describe "eve_$2" >& /dev/null; then
-               module restore "eve_$2" 2>/dev/null
+               _evemodulerestore "eve_$2" 2>/dev/null
            fi
            source  "${everoot}/$2"/bin/activate
            if [[ ! -d "${HOME}/.local/share/jupyter/kernels/$2" ]]; then
